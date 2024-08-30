@@ -8,6 +8,7 @@ import {
     switchMap,
     takeUntil,
     tap,
+    withLatestFrom,
 } from "rxjs";
 
 export class CItem {
@@ -25,6 +26,7 @@ export class CItem {
     createNode(item: TItem): HTMLLIElement {
         const li = document.createElement("li");
         li.className = "column__listing-item";
+        li.setAttribute("data-id", item.id);
         li.draggable = true;
         li.textContent = item.name;
 
@@ -82,9 +84,26 @@ export class CItem {
             )
             .subscribe();
 
-        dragEnd$.subscribe(() => {      
-            DBInterface.queueUpstream(this.item);
-        });
+        // dragEnd$.subscribe(() => {      
+        //     DBInterface.queueUpstream(this.item);
+        //     console.log('item updated', this.item)
+        // });
+
+        dragEnd$
+            .pipe(
+                withLatestFrom(drag$), // Combine dragEnd$ with the latest value from drag$
+                map(([_, { draggedItem }]) => {
+                    return {
+                        dropTarget: draggedItem.closest(".column")!,
+                    };
+                }),
+                tap(({ dropTarget }) => {
+                    const category = dropTarget.id;
+                    this.item.category = category;
+                    DBInterface.queueUpstream(this.item);
+                })
+            )
+            .subscribe();
 
         return element;
     }

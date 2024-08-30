@@ -4,7 +4,7 @@ import { DBInterface } from "../adapters/DBinterface";
 
 export class ColumnManager {
     private columns: { [category: string]: HTMLElement } = {};
-    public columnNames = ["new", "ready", "inProgress", "shipped"];
+    public columnNames = ["new","inProgress", "ready",  "shipped"];
     private wrapper: HTMLElement | undefined;
 
     
@@ -61,6 +61,7 @@ export class ColumnManager {
     private addItemsToColumns(items: TItem[]): void {
         items.forEach((item) => {
             const column = this.columns[item.category];
+            document.querySelector(".column__listing-item[data-id='" + item.id + "']")?.remove();
             if (column) {
                 const itemElement = new CItem(item).element;
                 column.querySelector("ul")?.appendChild(itemElement);
