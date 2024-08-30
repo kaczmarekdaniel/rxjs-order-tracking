@@ -1,15 +1,16 @@
 import { BehaviorSubject, Observable, Subject } from "rxjs";
 import { TItem } from "../types/main";
-import { startWith, pairwise, map } from "rxjs/operators";
+import { tap } from "rxjs/operators";
 
 class DatabaseConnector {
     private downstream$: BehaviorSubject<TItem[]>;
     private upstream$: Subject<TItem>;
+    private ws: WebSocket = new WebSocket("ws://localhost:9001");
 
     constructor() {
         this.downstream$ = new BehaviorSubject<TItem[]>([]);
         this.upstream$ = new Subject<TItem>();
-        this.simulateSocketConnection();
+        this.setupSocketConnection();
         this.logUpstreamData();
     }
 
@@ -25,93 +26,43 @@ class DatabaseConnector {
 
     queueUpstream(item: TItem): void {
         // const updatedValue = [...this.upstream$.value, item];
-        // console.log(updatedValue);
         this.upstream$.next(item);
     }
 
     updateDownstream(newItems: TItem[]): void {
-        const updatedValue = [...this.downstream$.value, ...newItems];
+        let updatedValue: TItem[] = [...this.downstream$.value];
+
+        if (Array.isArray(newItems)) {
+            updatedValue = [...updatedValue, ...newItems];
+        } else {
+            const newItem: TItem = newItems;
+            const filteredItems = updatedValue.filter(
+                (item) => item.id !== newItem.id
+            );
+            updatedValue = [...filteredItems, newItems];
+        }
+
         this.downstream$.next(updatedValue);
     }
 
     subscribeToDownstream(onNewItems: (items: TItem[]) => void): void {
-        this.downstream$
-            .pipe(
-                startWith([]),
-                pairwise(),
-                map(([previousItems, currentItems]) =>
-                    this.filterNewItems(previousItems, currentItems)
-                )
-            )
-            .subscribe(onNewItems);
-    }
-
-    private filterNewItems(
-        previousItems: TItem[],
-        currentItems: TItem[]
-    ): TItem[] {
-        if (previousItems.length === 0) return currentItems;
-
-        return currentItems.filter(
-            (newItem) =>
-                !previousItems.some(
-                    (previousItem) => previousItem.id === newItem.id
-                )
-        );
+        this.downstream$.pipe(tap(onNewItems)).subscribe();
     }
 
     private logUpstreamData(): void {
         this.upstream$.subscribe((data) => {
-            console.log("API call", data);
+            this.ws.send(JSON.stringify(data));
         });
     }
 
-    private simulateSocketConnection(): void {
-        // Simulated socket data
-        setTimeout(
-            () =>
-                this.updateDownstream([
-                    { id: "7", category: "inProgress", name: "test shoes" },
-                    { id: "11", category: "shipped", name: "test" },
-                ]),
-            2000
-        );
+    private setupSocketConnection(): void {
+        this.ws.onmessage = (event) => {
+            this.updateDownstream(JSON.parse(event.data));
+        };
 
-        // setTimeout(
-        //     () =>
-        //         this.queueUpstream([
-        //             { id: "4", category: "inProgress", name: "Running shoes" },
-        //             { id: "5", category: "shipped", name: "Tent" },
-        //         ]),
-        //     2000
-        // );
-
-        // setTimeout(
-        //     () =>
-        //         this.queueUpstream([
-        //             { id: "6", category: "inProgress", name: "Running shoes" },
-        //             { id: "7", category: "shipped", name: "Tent" },
-        //         ]),
-        //     2000
-        // );
-
-        setTimeout(
-            () =>
-                this.updateDownstream([
-                    { id: "4", category: "inProgress", name: "Running shoes" },
-                    { id: "5", category: "shipped", name: "Tent" },
-                ]),
-            2000
-        );
-
-        setTimeout(
-            () =>
-                this.updateDownstream([
-                    { id: "6", category: "new", name: "yoga mat" },
-                    { id: "7", category: "shipped", name: "Bike" },
-                ]),
-            3500
-        );
+        this.ws.onerror = (error) => {
+            console.error("WebSocket error:", error);
+        };
     }
 }
 
